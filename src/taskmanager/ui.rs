@@ -1,99 +1,96 @@
-use iced::{
-    Alignment::Center,
-    Color, Element,
-    Length::Fill,
-    Subscription,
-    widget::{button, button::Style, center, column, container, row, svg, text},
-};
-use std::time::Duration;
+use eframe::egui::{self, FontId, Vec2, Visuals, include_image};
+
+use std::time::{Duration, Instant};
 use sysinfo::System;
 
-#[derive(Default)]
 pub struct TaskManager {
-    total_mem: u64,
-    // used_mem: u64,
+    sys: System,
+    last_cpu_refresh: Instant,
+    total_mem: f32,
     cpu_usage: f32,
+    uptime: String,
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    ShowProcesses,
-    ShowPerformance,
-    Tick,
-}
+impl Default for TaskManager {
+    fn default() -> Self {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let total_mem = sys.total_memory() as f32 / 1000000000.0;
 
-impl TaskManager {
-    pub fn boot() -> TaskManager {
-        TaskManager::default()
-    }
+        let uptime = String::new();
 
-    pub fn update(state: &mut TaskManager, message: Message) {
-        match message {
-            Message::Tick => {
-                let mut sys = System::new_all();
-                sys.refresh_all();
-
-                state.total_mem = sys.total_memory();
-
-                std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-                sys.refresh_cpu_usage();
-                state.cpu_usage = sys.global_cpu_usage();
-            }
-            Message::ShowProcesses => {}
-            Message::ShowPerformance => {}
+        Self {
+            sys,
+            last_cpu_refresh: Instant::now(),
+            total_mem,
+            cpu_usage: 0.0,
+            uptime,
         }
     }
+}
 
-    pub fn view(state: &TaskManager) -> Element<'_, Message> {
-        let sidebar = container(column![
-            button(row![
-                svg("assets/tetris-svgrepo-com.svg").width(50).height(50),
-            ])
-            .on_press(Message::ShowProcesses)
-            .style(|_theme, status| {
-                let bg = match status {
-                    button::Status::Hovered => Color::from_rgb8(106, 109, 111),
-                    _ => Color::from_rgb8(238, 244, 248),
-                };
-                Style {
-                    background: Some(bg.into()),
-                    ..Style::default()
-                }
-            }),
-            button(row![
-                svg("assets/image-removebg-preview.svg")
-                    .width(50)
-                    .height(50),
-            ])
-            .on_press(Message::ShowPerformance)
-            .style(|_theme, status| {
-                let bg = match status {
-                    button::Status::Hovered => Color::from_rgb8(106, 109, 111),
-                    _ => Color::from_rgb8(238, 244, 248),
-                };
-                Style {
-                    background: Some(bg.into()),
-                    ..Style::default()
-                }
-            }),
-        ])
-        .height(Fill)
-        .style(|_theme| container::Style {
-            background: Some(Color::from_rgb8(238, 244, 248).into()),
-            ..container::Style::default()
+impl eframe::App for TaskManager {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.global_style_mut(|style| {
+            style
+                .text_styles
+                .insert(egui::TextStyle::Body, FontId::proportional(28.0));
+            style
+                .text_styles
+                .insert(egui::TextStyle::Button, FontId::proportional(28.0));
         });
 
-        let content = column![
-            text(format!("Total memory: {}", state.total_mem)).size(28),
-            text(format!("CPU usage: {}%", state.cpu_usage)).size(28)
-        ]
-        .width(Fill)
-        .align_x(Center);
+        ctx.set_visuals(Visuals::light());
 
-        center(row![sidebar, content]).into()
+        if self.last_cpu_refresh.elapsed() >= Duration::from_secs(1) {
+            self.sys.refresh_cpu_usage();
+            self.cpu_usage = self.sys.global_cpu_usage();
+            self.last_cpu_refresh = Instant::now();
+        }
+
+        let up = sysinfo::System::uptime();
+        let mut uptime = up;
+        let hours = uptime / 3600;
+        uptime -= hours * 3600;
+        let minutes = uptime / 60;
+        self.uptime = format!("{hours}:{minutes}:{up}");
+
+        ctx.request_repaint_after(Duration::from_secs(1));
     }
 
-    pub fn subscription(_state: &TaskManager) -> Subscription<Message> {
-        iced::time::every(Duration::from_secs(1)).map(|_| Message::Tick)
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::left("sidepanel")
+            .default_size(50.)
+            .resizable(true)
+            .show_inside(ui, |ui| {
+                let proccesses_icon =
+                    egui::Image::new(include_image!("../../assets/tetris-svgrepo-com.png"));
+                let performance_icon =
+                    egui::Image::new(include_image!("../../assets/image-removebg-preview.png"));
+
+                if ui
+                    .add(
+                        egui::Button::image(proccesses_icon.fit_to_original_size(0.03))
+                            .min_size(Vec2::new(50., 50.)),
+                    )
+                    .clicked()
+                {
+                    todo!()
+                }
+                if ui
+                    .add(
+                        egui::Button::image(performance_icon.fit_to_original_size(0.05))
+                            .min_size(Vec2::new(57., 50.)),
+                    )
+                    .clicked()
+                {
+                    todo!()
+                }
+            });
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            ui.label(format!("Total memory: {} GB", self.total_mem));
+            ui.label(format!("CPU usage: {}%", self.cpu_usage));
+            ui.label(format!("Up time: {}", self.uptime));
+        });
     }
 }
