@@ -45,7 +45,6 @@ cargo run
 | [egui_extras](https://github.com/emilk/egui/tree/master/crates/egui_extras) | Extra widgets and image loading |
 | [egui_plot](https://github.com/emilk/egui_plot) | Plotting widgets for line charts |
 | [sysinfo](https://crates.io/crates/sysinfo) | Cross-platform system information (CPU, memory, uptime) |
-| [tokio](https://crates.io/crates/tokio) | Async runtime |
 
 ## Project Structure
 
