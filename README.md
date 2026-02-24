@@ -12,7 +12,11 @@ A lightweight system monitor application built with Rust and [egui](https://gith
 
 ## Screenshots
 
-*Coming soon*
+### CPU Monitoring
+![CPU monitoring view](assets/screenshots/s1.png)
+
+### Memory Monitoring
+![Memory monitoring view](assets/screenshots/s2.png)
 
 ## Prerequisites
 
