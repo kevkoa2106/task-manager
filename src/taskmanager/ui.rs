@@ -4,6 +4,28 @@ use egui_plot::{Line, Plot};
 use std::time::{Duration, Instant};
 use sysinfo::System;
 
+pub fn bytes_to_gb(bytes: u64) -> f32 {
+    bytes as f32 / 1_000_000_000.0
+}
+
+pub fn memory_usage_percent(used: f64, total: f64) -> f64 {
+    if total > 0.0 {
+        (used / total) * 100.0
+    } else {
+        0.0
+    }
+}
+
+pub fn format_uptime(seconds: u64) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    format!("{hours}:{minutes}    Total in secs: {seconds}")
+}
+
+pub fn mhz_to_ghz(mhz: u64) -> f32 {
+    mhz as f32 / 1000.0
+}
+
 #[derive(PartialEq)]
 enum SelectedTab {
     Cpu,
@@ -27,7 +49,7 @@ impl Default for TaskManager {
     fn default() -> Self {
         let mut sys = System::new_all();
         sys.refresh_all();
-        let total_mem = sys.total_memory() as f32 / 1000000000.0;
+        let total_mem = bytes_to_gb(sys.total_memory());
 
         let uptime = String::new();
 
@@ -65,27 +87,19 @@ impl eframe::App for TaskManager {
             self.cpu_usage = self.sys.global_cpu_usage();
             self.cpu_history.push(self.cpu_usage as f64);
 
-            let used_mem = self.sys.used_memory() as f64;
-            let total_mem = self.sys.total_memory() as f64;
-            self.memory_usage = if total_mem > 0.0 {
-                (used_mem / total_mem) * 100.0
-            } else {
-                0.0
-            };
+            self.memory_usage = memory_usage_percent(
+                self.sys.used_memory() as f64,
+                self.sys.total_memory() as f64,
+            );
             self.memory_history.push(self.memory_usage);
 
             self.last_cpu_refresh = Instant::now();
         }
 
-        let up = sysinfo::System::uptime();
-        let mut uptime = up;
-        let hours = uptime / 3600;
-        uptime -= hours * 3600;
-        let minutes = uptime / 60;
-        self.uptime = format!("{hours}:{minutes}    Total in secs: {up}");
+        self.uptime = format_uptime(sysinfo::System::uptime());
 
         for cpu in self.sys.cpus() {
-            self.cpu_frequency = cpu.frequency() as f32 / 1000.0;
+            self.cpu_frequency = mhz_to_ghz(cpu.frequency());
         }
 
         ctx.request_repaint_after(Duration::from_secs(1));

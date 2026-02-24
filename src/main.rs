@@ -1,6 +1,4 @@
-pub mod taskmanager;
-
-use taskmanager::ui::*;
+use task_manager::taskmanager::ui::*;
 
 use eframe::egui;
 
