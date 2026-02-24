@@ -917,6 +917,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_plot"
+version = "0.34.1"
+source = "git+https://github.com/emilk/egui_plot#c7feb89cc9d7fedd00ef3bb935305423c8950ca9"
+dependencies = [
+ "ahash",
+ "egui",
+ "emath",
+]
+
+[[package]]
 name = "emath"
 version = "0.33.3"
 source = "git+https://github.com/emilk/egui#08f3fd2dc1051c47315437877a01effe6fd84e15"
@@ -2978,6 +2988,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_extras",
+ "egui_plot",
  "sysinfo",
  "tokio",
 ]

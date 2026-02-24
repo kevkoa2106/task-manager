@@ -11,3 +11,9 @@ egui_extras = { git = "https://github.com/emilk/egui", features = [
     "default",
     "image",
 ] }
+egui_plot = { git = "https://github.com/emilk/egui_plot", version = "0.34.1" }
+
+[patch.crates-io]
+egui = { git = "https://github.com/emilk/egui" }
+epaint = { git = "https://github.com/emilk/egui" }
+emath = { git = "https://github.com/emilk/egui" }
