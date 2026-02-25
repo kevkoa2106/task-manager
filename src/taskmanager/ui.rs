@@ -1,8 +1,12 @@
-use eframe::egui::{self, Color32, FontId, Frame, Vec2, Visuals, include_image};
-use egui_plot::{Line, Plot};
-
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use sysinfo::System;
+
+use iced::widget::{button, column, container, row, text};
+use iced::{Alignment, Background, Color, Element, Length, Subscription, Theme};
+use plotters::coord::Shift;
+use plotters::prelude::*;
+use plotters::style::Color as _;
+use plotters_iced2::{Chart, ChartWidget};
 
 pub fn bytes_to_gb(bytes: u64) -> f32 {
     bytes as f32 / 1_000_000_000.0
@@ -26,15 +30,14 @@ pub fn mhz_to_ghz(mhz: u64) -> f32 {
     mhz as f32 / 1000.0
 }
 
-#[derive(PartialEq)]
-enum SelectedTab {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SelectedTab {
     Cpu,
     Memory,
 }
 
-pub struct TaskManager {
+pub struct State {
     sys: System,
-    last_cpu_refresh: Instant,
     total_mem: f32,
     cpu_usage: f32,
     cpu_frequency: f32,
@@ -43,240 +46,313 @@ pub struct TaskManager {
     memory_history: Vec<f64>,
     uptime: String,
     selected_tab: SelectedTab,
+    processes_icon: iced::widget::image::Handle,
+    performance_icon: iced::widget::image::Handle,
 }
 
-impl Default for TaskManager {
+impl Default for State {
     fn default() -> Self {
         let mut sys = System::new_all();
         sys.refresh_all();
         let total_mem = bytes_to_gb(sys.total_memory());
 
-        let uptime = String::new();
-
         Self {
             sys,
-            last_cpu_refresh: Instant::now(),
             total_mem,
             cpu_usage: 0.0,
             cpu_frequency: 0.0,
             cpu_history: Vec::new(),
             memory_usage: 0.0,
             memory_history: Vec::new(),
-            uptime,
+            uptime: String::new(),
             selected_tab: SelectedTab::Cpu,
+            processes_icon: iced::widget::image::Handle::from_bytes(
+                include_bytes!("../../assets/tetris-svgrepo-com.png").as_slice(),
+            ),
+            performance_icon: iced::widget::image::Handle::from_bytes(
+                include_bytes!("../../assets/image-removebg-preview.png").as_slice(),
+            ),
         }
     }
 }
 
-impl eframe::App for TaskManager {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.global_style_mut(|style| {
-            style
-                .text_styles
-                .insert(egui::TextStyle::Body, FontId::proportional(28.0));
-            style
-                .text_styles
-                .insert(egui::TextStyle::Button, FontId::proportional(28.0));
-        });
+#[derive(Debug, Clone)]
+pub enum Message {
+    Tick,
+    SelectCpu,
+    SelectMemory,
+}
 
-        ctx.set_visuals(Visuals::light());
+// --- Thumbnail chart (no axes, used in tab selector buttons) ---
 
-        if self.last_cpu_refresh.elapsed() >= Duration::from_secs(1) {
-            self.sys.refresh_cpu_usage();
-            self.sys.refresh_memory();
-            self.cpu_usage = self.sys.global_cpu_usage();
-            self.cpu_history.push(self.cpu_usage as f64);
+struct ThumbChart<'a> {
+    data: &'a [f64],
+    color: RGBColor,
+}
 
-            self.memory_usage = memory_usage_percent(
-                self.sys.used_memory() as f64,
-                self.sys.total_memory() as f64,
+impl<'a> Chart<Message> for ThumbChart<'a> {
+    type State = ();
+
+    fn draw_chart<DB: DrawingBackend>(&self, state: &Self::State, root: DrawingArea<DB, Shift>) {
+        root.fill(&RGBColor(25, 25, 38)).unwrap();
+        self.build_chart(state, ChartBuilder::on(&root));
+    }
+
+    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
+        let x_max = if self.data.len() > 1 {
+            (self.data.len() - 1) as f64
+        } else {
+            1.0
+        };
+
+        let mut chart = builder
+            .margin(2)
+            .build_cartesian_2d(0f64..x_max, 0f64..100f64)
+            .expect("failed to build thumb chart");
+
+        chart
+            .configure_mesh()
+            .disable_mesh()
+            .disable_axes()
+            .draw()
+            .expect("failed to draw thumb mesh");
+
+        if !self.data.is_empty() {
+            chart
+                .draw_series(LineSeries::new(
+                    self.data.iter().enumerate().map(|(i, &v)| (i as f64, v)),
+                    ShapeStyle::from(self.color).stroke_width(2),
+                ))
+                .expect("failed to draw thumb series");
+        }
+    }
+}
+
+// --- Detail chart (with axes and labels, used in main content) ---
+
+struct DetailChart<'a> {
+    data: &'a [f64],
+    color: RGBColor,
+    y_label: &'a str,
+}
+
+impl<'a> Chart<Message> for DetailChart<'a> {
+    type State = ();
+
+    fn draw_chart<DB: DrawingBackend>(&self, state: &Self::State, root: DrawingArea<DB, Shift>) {
+        root.fill(&RGBColor(25, 25, 38)).unwrap();
+        self.build_chart(state, ChartBuilder::on(&root));
+    }
+
+    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
+        let x_max = if self.data.len() > 1 {
+            (self.data.len() - 1) as f64
+        } else {
+            1.0
+        };
+
+        let mut chart = builder
+            .x_label_area_size(30)
+            .y_label_area_size(40)
+            .margin(10)
+            .build_cartesian_2d(0f64..x_max, 0f64..100f64)
+            .expect("failed to build detail chart");
+
+        chart
+            .configure_mesh()
+            .label_style(("sans-serif", 12, &WHITE))
+            .bold_line_style(WHITE.mix(0.1))
+            .light_line_style(WHITE.mix(0.05))
+            .axis_style(WHITE.mix(0.3))
+            .x_desc("Time (s)")
+            .y_desc(self.y_label)
+            .draw()
+            .expect("failed to draw detail mesh");
+
+        if !self.data.is_empty() {
+            chart
+                .draw_series(
+                    AreaSeries::new(
+                        self.data.iter().enumerate().map(|(i, &v)| (i as f64, v)),
+                        0.0,
+                        self.color.mix(0.2),
+                    )
+                    .border_style(ShapeStyle::from(self.color).stroke_width(2)),
+                )
+                .expect("failed to draw detail series");
+        }
+    }
+}
+
+// --- Update ---
+
+pub fn update(state: &mut State, message: Message) {
+    match message {
+        Message::Tick => {
+            state.sys.refresh_cpu_usage();
+            state.sys.refresh_memory();
+            state.cpu_usage = state.sys.global_cpu_usage();
+            state.cpu_history.push(state.cpu_usage as f64);
+
+            state.memory_usage = memory_usage_percent(
+                state.sys.used_memory() as f64,
+                state.sys.total_memory() as f64,
             );
-            self.memory_history.push(self.memory_usage);
+            state.memory_history.push(state.memory_usage);
 
-            self.last_cpu_refresh = Instant::now();
+            state.uptime = format_uptime(sysinfo::System::uptime());
+
+            for cpu in state.sys.cpus() {
+                state.cpu_frequency = mhz_to_ghz(cpu.frequency());
+            }
         }
-
-        self.uptime = format_uptime(sysinfo::System::uptime());
-
-        for cpu in self.sys.cpus() {
-            self.cpu_frequency = mhz_to_ghz(cpu.frequency());
+        Message::SelectCpu => {
+            state.selected_tab = SelectedTab::Cpu;
         }
-
-        ctx.request_repaint_after(Duration::from_secs(1));
+        Message::SelectMemory => {
+            state.selected_tab = SelectedTab::Memory;
+        }
     }
+}
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::left("sidepanel")
-            .default_size(50.)
-            .resizable(false)
-            .frame(Frame {
-                fill: Color32::LIGHT_GRAY,
-                ..Default::default()
+// --- View ---
+
+fn tail(data: &[f64], max: usize) -> &[f64] {
+    if data.len() > max {
+        &data[data.len() - max..]
+    } else {
+        data
+    }
+}
+
+pub fn view(state: &State) -> Element<'_, Message> {
+    let cpu_color = RGBColor(0, 255, 255);
+    let mem_color = RGBColor(180, 0, 255);
+
+    // --- Sidebar with icon buttons (handles stored in State to avoid flicker) ---
+    let processes_icon = iced::widget::image(state.processes_icon.clone())
+        .width(30)
+        .height(30);
+
+    let performance_icon = iced::widget::image(state.performance_icon.clone())
+        .width(30)
+        .height(30);
+
+    let sidebar = container(
+        column![
+            button(processes_icon).width(50).height(50),
+            button(performance_icon).width(50).height(50),
+        ]
+        .spacing(10)
+        .padding(5),
+    )
+    .style(|_: &Theme| container::Style {
+        background: Some(Background::Color(Color::from_rgb(1.0, 1.0, 1.0))),
+        ..Default::default()
+    });
+
+    // --- Tab selector panel ---
+    let cpu_thumb: Element<'_, Message> = ChartWidget::new(ThumbChart {
+        data: tail(&state.cpu_history, 60),
+        color: cpu_color,
+    })
+    .width(Length::Fixed(120.0))
+    .height(Length::Fixed(50.0))
+    .into();
+
+    let mem_thumb: Element<'_, Message> = ChartWidget::new(ThumbChart {
+        data: tail(&state.memory_history, 60),
+        color: mem_color,
+    })
+    .width(Length::Fixed(120.0))
+    .height(Length::Fixed(50.0))
+    .into();
+
+    let cpu_btn = button(
+        row![cpu_thumb, text("CPU").size(16)]
+            .spacing(10)
+            .align_y(Alignment::Center),
+    )
+    .style(if state.selected_tab == SelectedTab::Cpu {
+        button::primary
+    } else {
+        button::secondary
+    })
+    .on_press(Message::SelectCpu)
+    .width(Length::Fill);
+
+    let mem_btn = button(
+        row![mem_thumb, text("Memory").size(16)]
+            .spacing(10)
+            .align_y(Alignment::Center),
+    )
+    .style(if state.selected_tab == SelectedTab::Memory {
+        button::primary
+    } else {
+        button::secondary
+    })
+    .on_press(Message::SelectMemory)
+    .width(Length::Fill);
+
+    let tab_panel = container(column![cpu_btn, mem_btn].spacing(10).padding(10)).width(220);
+
+    // --- Main content area ---
+    let main_content: Element<'_, Message> = match state.selected_tab {
+        SelectedTab::Cpu => {
+            let chart: Element<'_, Message> = ChartWidget::new(DetailChart {
+                data: tail(&state.cpu_history, 120),
+                color: cpu_color,
+                y_label: "CPU %",
             })
-            .show_inside(ui, |ui| {
-                let proccesses_icon =
-                    egui::Image::new(include_image!("../../assets/tetris-svgrepo-com.png"));
-                let performance_icon =
-                    egui::Image::new(include_image!("../../assets/image-removebg-preview.png"));
+            .width(Length::Fill)
+            .height(Length::Fixed(300.0))
+            .into();
 
-                if ui
-                    .add(
-                        egui::Button::image(proccesses_icon.fit_to_original_size(0.03))
-                            .min_size(Vec2::new(50., 50.)),
-                    )
-                    .clicked()
-                {
-                    todo!()
-                }
-                if ui
-                    .add(
-                        egui::Button::image(performance_icon.fit_to_original_size(0.05))
-                            .min_size(Vec2::new(57., 50.)),
-                    )
-                    .clicked()
-                {
-                    todo!()
-                }
-            });
-        egui::Panel::left("list of buttons")
-            .resizable(false)
-            .show_inside(ui, |ui| {
-                // CPU button
-                let cpu_group = ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        let cpu_points: Vec<[f64; 2]> = self
-                            .cpu_history
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &usage)| [i as f64, usage])
-                            .collect();
-                        let cpu_line =
-                            Line::new("CPU %", cpu_points).color(Color32::from_rgb(0, 255, 255));
+            column![
+                chart,
+                text(format!("CPU usage: {:.1}%", state.cpu_usage)).size(18),
+                text(format!("CPU frequency: {:.2} GHz", state.cpu_frequency)).size(18),
+                text(format!("Up time: {}", state.uptime)).size(18),
+            ]
+            .spacing(10)
+            .padding(20)
+            .into()
+        }
+        SelectedTab::Memory => {
+            let chart: Element<'_, Message> = ChartWidget::new(DetailChart {
+                data: tail(&state.memory_history, 120),
+                color: mem_color,
+                y_label: "Memory %",
+            })
+            .width(Length::Fill)
+            .height(Length::Fixed(300.0))
+            .into();
 
-                        Plot::new("cpu_thumb")
-                            .height(50.0)
-                            .width(120.0)
-                            .show_axes([false, false])
-                            .show_grid([false, false])
-                            .include_y(0.0)
-                            .include_y(100.0)
-                            .allow_drag(false)
-                            .allow_zoom(false)
-                            .allow_scroll(false)
-                            .allow_boxed_zoom(false)
-                            .show(ui, |plot_ui| {
-                                plot_ui.line(cpu_line);
-                            });
+            column![
+                chart,
+                text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
+                text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
+            ]
+            .spacing(10)
+            .padding(20)
+            .into()
+        }
+    };
 
-                        ui.label("CPU");
-                    });
-                });
+    // --- Combine into a row layout ---
+    row![
+        sidebar,
+        tab_panel,
+        container(main_content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+    ]
+    .height(Length::Fill)
+    .into()
+}
 
-                let cpu_response = cpu_group.response.interact(egui::Sense::click());
-                if cpu_response.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                }
-                if cpu_response.clicked() {
-                    self.selected_tab = SelectedTab::Cpu;
-                }
+// --- Subscription: tick every second to refresh system data ---
 
-                // Memory button
-                let mem_group = ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        let mem_points: Vec<[f64; 2]> = self
-                            .memory_history
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &usage)| [i as f64, usage])
-                            .collect();
-                        let mem_line =
-                            Line::new("Mem %", mem_points).color(Color32::from_rgb(180, 0, 255));
-
-                        Plot::new("mem_thumb")
-                            .height(50.0)
-                            .width(120.0)
-                            .show_axes([false, false])
-                            .show_grid([false, false])
-                            .include_y(0.0)
-                            .include_y(100.0)
-                            .allow_drag(false)
-                            .allow_zoom(false)
-                            .allow_scroll(false)
-                            .allow_boxed_zoom(false)
-                            .allow_axis_zoom_drag(false)
-                            .allow_double_click_reset(false)
-                            .show(ui, |plot_ui| {
-                                plot_ui.line(mem_line);
-                            });
-
-                        ui.label("Memory");
-                    });
-                });
-
-                let mem_response = mem_group.response.interact(egui::Sense::click());
-                if mem_response.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                }
-                if mem_response.clicked() {
-                    self.selected_tab = SelectedTab::Memory;
-                }
-            });
-        egui::CentralPanel::default().show_inside(ui, |ui| match self.selected_tab {
-            SelectedTab::Cpu => {
-                let cpu_points: Vec<[f64; 2]> = self
-                    .cpu_history
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &usage)| [i as f64, usage])
-                    .collect();
-                let cpu_line = Line::new("CPU %", cpu_points).color(Color32::from_rgb(0, 255, 255));
-
-                Plot::new("cpu_usage_plot")
-                    .view_aspect(3.0)
-                    .y_axis_label("CPU %")
-                    .x_axis_label("Time (s)")
-                    .include_y(0.0)
-                    .include_y(100.0)
-                    .allow_drag(false)
-                    .allow_zoom(false)
-                    .allow_scroll(false)
-                    .allow_boxed_zoom(false)
-                    .show(ui, |plot_ui| {
-                        plot_ui.line(cpu_line);
-                    });
-
-                ui.add_space(10.0);
-                ui.label(format!("CPU usage: {}%", self.cpu_usage));
-                ui.label(format!("CPU frequency: {} GHz", self.cpu_frequency));
-                ui.label(format!("Up time: {}", self.uptime));
-            }
-            SelectedTab::Memory => {
-                let mem_points: Vec<[f64; 2]> = self
-                    .memory_history
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &usage)| [i as f64, usage])
-                    .collect();
-                let mem_line = Line::new("Mem %", mem_points).color(Color32::from_rgb(180, 0, 255));
-
-                Plot::new("mem_usage_plot")
-                    .view_aspect(3.0)
-                    .y_axis_label("Memory %")
-                    .x_axis_label("Time (s)")
-                    .include_y(0.0)
-                    .include_y(100.0)
-                    .allow_drag(false)
-                    .allow_zoom(false)
-                    .allow_scroll(false)
-                    .allow_boxed_zoom(false)
-                    .show(ui, |plot_ui| {
-                        plot_ui.line(mem_line);
-                    });
-
-                ui.add_space(10.0);
-                ui.label(format!("Memory usage: {:.1}%", self.memory_usage));
-                ui.label(format!("Total memory: {} GB", self.total_mem));
-            }
-        });
-    }
+pub fn subscription(_state: &State) -> Subscription<Message> {
+    iced::time::every(Duration::from_secs(1)).map(|_| Message::Tick)
 }

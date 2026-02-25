@@ -4,18 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = { git = "https://github.com/emilk/egui", version = "0.33.3" }
 sysinfo = "0.38.2"
-egui_extras = { git = "https://github.com/emilk/egui", features = [
-    "default",
-    "image",
-] }
-egui_plot = { git = "https://github.com/emilk/egui_plot", version = "0.34.1" }
-
-[patch.crates-io]
-egui = { git = "https://github.com/emilk/egui" }
-epaint = { git = "https://github.com/emilk/egui" }
-emath = { git = "https://github.com/emilk/egui" }
+iced = { version = "0.14.0", features = ["image", "canvas", "smol", "tokio"] }
+image = "0.25.9"
+plotters-iced2 = "0.14"
+plotters = "0.3"
 
 [profile.release]
 strip = true

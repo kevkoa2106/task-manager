@@ -1,19 +1,14 @@
+use iced::Theme;
 use task_manager::taskmanager::ui::*;
 
-use eframe::egui;
+fn theme(_state: &State) -> Theme {
+    Theme::Dark
+}
 
-fn main() -> eframe::Result {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1020.0, 640.0]),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "Task Manager",
-        options,
-        Box::new(|cc| {
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-
-            Ok(Box::<TaskManager>::default())
-        }),
-    )
+fn main() -> iced::Result {
+    iced::application(State::default, update, view)
+        .title("Task Manager")
+        .subscription(subscription)
+        .theme(theme)
+        .run()
 }
