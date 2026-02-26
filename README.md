@@ -15,9 +15,6 @@ A lightweight system monitor application built with Rust and [Iced](https://gith
 ### CPU Monitoring
 ![CPU monitoring view](assets/screenshots/s1.png)
 
-### Memory Monitoring
-![Memory monitoring view](assets/screenshots/s2.png)
-
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (edition 2024)
