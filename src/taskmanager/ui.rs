@@ -81,9 +81,11 @@ pub enum Message {
     Tick,
     SelectCpu,
     SelectMemory,
+    OpenProcesses,
+    OpenPerformance,
 }
 
-// --- Thumbnail chart (no axes, used in tab selector buttons) ---
+// Thumbnail chart (no axes, used in tab selector buttons)
 
 struct ThumbChart<'a> {
     data: &'a [f64],
@@ -128,7 +130,7 @@ impl<'a> Chart<Message> for ThumbChart<'a> {
     }
 }
 
-// --- Detail chart (with axes and labels, used in main content) ---
+// Detail chart
 
 struct DetailChart<'a> {
     data: &'a [f64],
@@ -184,8 +186,6 @@ impl<'a> Chart<Message> for DetailChart<'a> {
     }
 }
 
-// --- Update ---
-
 pub fn update(state: &mut State, message: Message) {
     match message {
         Message::Tick => {
@@ -212,10 +212,14 @@ pub fn update(state: &mut State, message: Message) {
         Message::SelectMemory => {
             state.selected_tab = SelectedTab::Memory;
         }
+        Message::OpenProcesses => {
+            todo!()
+        }
+        Message::OpenPerformance => {
+            todo!()
+        }
     }
 }
-
-// --- View ---
 
 fn tail(data: &[f64], max: usize) -> &[f64] {
     if data.len() > max {
@@ -229,7 +233,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let cpu_color = RGBColor(0, 255, 255);
     let mem_color = RGBColor(180, 0, 255);
 
-    // --- Sidebar with icon buttons (handles stored in State to avoid flicker) ---
+    // Sidebar with icon buttons
     let processes_icon = iced::widget::image(state.processes_icon.clone())
         .width(30)
         .height(30);
@@ -240,18 +244,44 @@ pub fn view(state: &State) -> Element<'_, Message> {
 
     let sidebar = container(
         column![
-            button(processes_icon).width(50).height(50),
-            button(performance_icon).width(50).height(50),
+            button(processes_icon)
+                .width(50)
+                .height(50)
+                .on_press(Message::OpenProcesses)
+                .style(|_, status| button::Style {
+                    background: Some(Background::Color(match status {
+                        button::Status::Hovered =>
+                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+                    })),
+                    text_color: Color::WHITE,
+                    ..Default::default()
+                }),
+            button(performance_icon)
+                .width(50)
+                .height(50)
+                .on_press(Message::OpenPerformance)
+                .style(|_, status| button::Style {
+                    background: Some(Background::Color(match status {
+                        button::Status::Hovered =>
+                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+                    })),
+                    text_color: Color::WHITE,
+                    ..Default::default()
+                }),
         ]
         .spacing(10)
         .padding(5),
     )
     .style(|_: &Theme| container::Style {
-        background: Some(Background::Color(Color::from_rgb(1.0, 1.0, 1.0))),
+        background: Some(Background::Color(Color::from_rgb(
+            0.09803922, 0.09803922, 0.14901961,
+        ))),
         ..Default::default()
     });
 
-    // --- Tab selector panel ---
+    // Tab selector panel
     let cpu_thumb: Element<'_, Message> = ChartWidget::new(ThumbChart {
         data: tail(&state.cpu_history, 60),
         color: cpu_color,
@@ -279,7 +309,15 @@ pub fn view(state: &State) -> Element<'_, Message> {
         button::secondary
     })
     .on_press(Message::SelectCpu)
-    .width(Length::Fill);
+    .width(Length::Fill)
+    .style(|_, status| button::Style {
+        background: Some(Background::Color(match status {
+            button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+            _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+        })),
+        text_color: Color::WHITE,
+        ..Default::default()
+    });
 
     let mem_btn = button(
         row![mem_thumb, text("Memory").size(16)]
@@ -292,11 +330,19 @@ pub fn view(state: &State) -> Element<'_, Message> {
         button::secondary
     })
     .on_press(Message::SelectMemory)
-    .width(Length::Fill);
+    .width(Length::Fill)
+    .style(|_, status| button::Style {
+        background: Some(Background::Color(match status {
+            button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+            _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+        })),
+        text_color: Color::WHITE,
+        ..Default::default()
+    });
 
     let tab_panel = container(column![cpu_btn, mem_btn].spacing(10).padding(10)).width(220);
 
-    // --- Main content area ---
+    // Main content area
     let main_content: Element<'_, Message> = match state.selected_tab {
         SelectedTab::Cpu => {
             let chart: Element<'_, Message> = ChartWidget::new(DetailChart {
@@ -339,7 +385,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         }
     };
 
-    // --- Combine into a row layout ---
+    // Combine into a row layout
     row![
         sidebar,
         tab_panel,
@@ -350,8 +396,6 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .height(Length::Fill)
     .into()
 }
-
-// --- Subscription: tick every second to refresh system data ---
 
 pub fn subscription(_state: &State) -> Subscription<Message> {
     iced::time::every(Duration::from_secs(1)).map(|_| Message::Tick)
