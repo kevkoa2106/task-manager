@@ -2,7 +2,9 @@ use std::time::Duration;
 use sysinfo::System;
 
 use iced::widget::{button, column, container, row, text};
-use iced::{Alignment, Background, Color, Element, Length, Subscription, Theme};
+use iced::{Alignment, Background, Color, Element, Length, Subscription};
+
+use crate::taskmanager::theme::Theme;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 use plotters::style::Color as _;
@@ -229,7 +231,7 @@ fn tail(data: &[f64], max: usize) -> &[f64] {
     }
 }
 
-pub fn view(state: &State) -> Element<'_, Message> {
+pub fn view(state: &State) -> Element<'_, Message, Theme> {
     let cpu_color = RGBColor(0, 255, 255);
     let mem_color = RGBColor(180, 0, 255);
 
@@ -242,39 +244,38 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .width(30)
         .height(30);
 
+    let processes_btn = button(processes_icon)
+        .width(50)
+        .height(50)
+        .on_press(Message::OpenProcesses)
+        .style(|_, status| button::Style {
+            background: Some(Background::Color(match status {
+                button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+                _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+            })),
+            text_color: Color::WHITE,
+            ..Default::default()
+        });
+
+    let performance_btn = button(performance_icon)
+        .width(50)
+        .height(50)
+        .on_press(Message::OpenPerformance)
+        .style(|_: &Theme, status| button::Style {
+            background: Some(Background::Color(match status {
+                button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
+                _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+            })),
+            text_color: Color::WHITE,
+            ..Default::default()
+        });
+
     let sidebar = container(
-        column![
-            button(processes_icon)
-                .width(50)
-                .height(50)
-                .on_press(Message::OpenProcesses)
-                .style(|_, status| button::Style {
-                    background: Some(Background::Color(match status {
-                        button::Status::Hovered =>
-                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-                    })),
-                    text_color: Color::WHITE,
-                    ..Default::default()
-                }),
-            button(performance_icon)
-                .width(50)
-                .height(50)
-                .on_press(Message::OpenPerformance)
-                .style(|_, status| button::Style {
-                    background: Some(Background::Color(match status {
-                        button::Status::Hovered =>
-                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-                    })),
-                    text_color: Color::WHITE,
-                    ..Default::default()
-                }),
-        ]
-        .spacing(10)
-        .padding(5),
+        column![processes_btn, performance_btn,]
+            .spacing(10)
+            .padding(5),
     )
-    .style(|_: &Theme| container::Style {
+    .style(|_: &_| container::Style {
         background: Some(Background::Color(Color::from_rgb(
             0.09803922, 0.09803922, 0.14901961,
         ))),
@@ -282,7 +283,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     });
 
     // Tab selector panel
-    let cpu_thumb: Element<'_, Message> = ChartWidget::new(ThumbChart {
+    let cpu_thumb: Element<'_, Message, Theme> = ChartWidget::new(ThumbChart {
         data: tail(&state.cpu_history, 60),
         color: cpu_color,
     })
@@ -290,7 +291,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .height(Length::Fixed(50.0))
     .into();
 
-    let mem_thumb: Element<'_, Message> = ChartWidget::new(ThumbChart {
+    let mem_thumb: Element<'_, Message, Theme> = ChartWidget::new(ThumbChart {
         data: tail(&state.memory_history, 60),
         color: mem_color,
     })
@@ -303,11 +304,6 @@ pub fn view(state: &State) -> Element<'_, Message> {
             .spacing(10)
             .align_y(Alignment::Center),
     )
-    .style(if state.selected_tab == SelectedTab::Cpu {
-        button::primary
-    } else {
-        button::secondary
-    })
     .on_press(Message::SelectCpu)
     .width(Length::Fill)
     .style(|_, status| button::Style {
@@ -324,11 +320,6 @@ pub fn view(state: &State) -> Element<'_, Message> {
             .spacing(10)
             .align_y(Alignment::Center),
     )
-    .style(if state.selected_tab == SelectedTab::Memory {
-        button::primary
-    } else {
-        button::secondary
-    })
     .on_press(Message::SelectMemory)
     .width(Length::Fill)
     .style(|_, status| button::Style {
@@ -343,9 +334,9 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let tab_panel = container(column![cpu_btn, mem_btn].spacing(10).padding(10)).width(220);
 
     // Main content area
-    let main_content: Element<'_, Message> = match state.selected_tab {
+    let main_content: Element<'_, Message, Theme> = match state.selected_tab {
         SelectedTab::Cpu => {
-            let chart: Element<'_, Message> = ChartWidget::new(DetailChart {
+            let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
                 data: tail(&state.cpu_history, 120),
                 color: cpu_color,
                 y_label: "CPU %",
@@ -365,7 +356,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
             .into()
         }
         SelectedTab::Memory => {
-            let chart: Element<'_, Message> = ChartWidget::new(DetailChart {
+            let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
                 data: tail(&state.memory_history, 120),
                 color: mem_color,
                 y_label: "Memory %",
