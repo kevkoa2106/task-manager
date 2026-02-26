@@ -1,6 +1,6 @@
 # Task Manager
 
-A lightweight system monitor application built with Rust and [egui](https://github.com/emilk/egui). Displays real-time CPU and memory usage with live-updating graphs.
+A lightweight system monitor application built with Rust and [Iced](https://github.com/iced-rs/iced). Displays real-time CPU and memory usage with live-updating graphs.
 
 ## Features
 
@@ -21,7 +21,6 @@ A lightweight system monitor application built with Rust and [egui](https://gith
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (edition 2024)
-- A working GPU driver for egui/wgpu rendering
 
 ## Building
 
@@ -45,16 +44,18 @@ cargo run
 
 | Crate | Purpose |
 |-------|---------|
-| [eframe](https://github.com/emilk/egui/tree/master/crates/eframe) | Application framework for egui |
-| [egui_extras](https://github.com/emilk/egui/tree/master/crates/egui_extras) | Extra widgets and image loading |
-| [egui_plot](https://github.com/emilk/egui_plot) | Plotting widgets for line charts |
+| [iced](https://github.com/iced-rs/iced) | Cross-platform GUI framework |
+| [plotters-iced2](https://crates.io/crates/plotters-iced2) | Plotters backend for Iced |
+| [plotters](https://crates.io/crates/plotters) | Plotting library for charts |
 | [sysinfo](https://crates.io/crates/sysinfo) | Cross-platform system information (CPU, memory, uptime) |
+| [image](https://crates.io/crates/image) | Image processing |
 
 ## Project Structure
 
 ```
 src/
-├── main.rs                 # Application entry point and window setup
+├── main.rs                 # Application entry point
+├── lib.rs                  # Library root
 └── taskmanager/
     ├── mod.rs              # Module declarations
     └── ui.rs               # UI layout, system data collection, and graph rendering
