@@ -50,8 +50,10 @@ pub struct State {
     memory_history: Vec<f64>,
     uptime: String,
     disks: Disks,
-    num_of_disks: i32,
     disk_usage: f64,
+    disk_history: Vec<f64>,
+    prev_disk_read: u64,
+    prev_disk_written: u64,
     selected_tab: SelectedTab,
     processes_icon: iced::widget::image::Handle,
     performance_icon: iced::widget::image::Handle,
@@ -75,8 +77,10 @@ impl Default for State {
             memory_history: Vec::new(),
             uptime: String::new(),
             disks: Disks::new_with_refreshed_list(),
-            num_of_disks: 0,
             disk_usage: 0.0,
+            disk_history: Vec::new(),
+            prev_disk_read: 0,
+            prev_disk_written: 0,
             selected_tab: SelectedTab::Cpu,
             processes_icon: iced::widget::image::Handle::from_bytes(
                 include_bytes!("../../assets/tetris-svgrepo-com.png").as_slice(),
@@ -149,6 +153,7 @@ struct DetailChart<'a> {
     data: &'a [f64],
     color: RGBColor,
     y_label: &'a str,
+    max_size: f64,
 }
 
 impl<'a> Chart<Message> for DetailChart<'a> {
@@ -170,7 +175,7 @@ impl<'a> Chart<Message> for DetailChart<'a> {
             .x_label_area_size(30)
             .y_label_area_size(40)
             .margin(10)
-            .build_cartesian_2d(0f64..x_max, 0f64..100f64)
+            .build_cartesian_2d(0f64..x_max, 0f64..self.max_size)
             .expect("failed to build detail chart");
 
         chart
@@ -220,13 +225,19 @@ pub fn update(state: &mut State, message: Message) {
                 state.cpu_frequency = mhz_to_ghz(cpu.frequency());
             }
 
-            // for disk in state.disks.list() {
-            //     let total_bytes = disk.usage().total_written_bytes as f64;
-            //     let used_bytes = disk.usage().read_bytes as f64 + disk.usage().written_bytes as f64;
+            for disk in state.disks.list() {
+                let read = disk.usage().read_bytes;
+                let written = disk.usage().written_bytes;
 
-            //     state.disk_usage = used_bytes / total_bytes * 100.0;
-            //     state.disk_history.push(state.disk_usage);
-            // }
+                let read_delta = read.saturating_sub(state.prev_disk_read);
+                let written_delta = written.saturating_sub(state.prev_disk_written);
+
+                state.disk_usage = (read_delta + written_delta) as f64 / 1_000_000.0;
+                state.disk_history.push(state.disk_usage);
+
+                state.prev_disk_read = read;
+                state.prev_disk_written = written;
+            }
         }
         Message::SelectCpu => {
             state.selected_tab = SelectedTab::Cpu;
@@ -254,7 +265,7 @@ fn tail(data: &[f64], max: usize) -> &[f64] {
     }
 }
 
-pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
+pub fn view(state: &State) -> Element<'_, Message, Theme> {
     let cpu_color = RGBColor(0, 255, 255);
     let mem_color = RGBColor(180, 0, 255);
     let disk_color = RGBColor(53, 189, 60);
@@ -355,20 +366,13 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
         ..Default::default()
     });
 
-    let mut disk_name = String::new();
-    let mut disk_history = Vec::new();
-    let mut disk_usage = 0.0;
+    let mut tab_children: Vec<Element<'_, Message, Theme>> = vec![cpu_btn.into(), mem_btn.into()];
 
     for disk in state.disks.list() {
-        let total_bytes = disk.usage().total_written_bytes as f64;
-        let used_bytes = disk.usage().read_bytes as f64 + disk.usage().written_bytes as f64;
-
-        state.disk_usage = used_bytes / total_bytes * 100.0;
-
-        disk_history.push(state.disk_usage);
+        let disk_name = disk.name().display().to_string();
 
         let disk_thumb: Element<'_, Message, Theme> = ChartWidget::new(ThumbChart {
-            data: tail(&disk_history, 60),
+            data: tail(&state.disk_history, 60),
             color: disk_color,
         })
         .width(Length::Fixed(120.0))
@@ -376,7 +380,7 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
         .into();
 
         let disk_btn = button(
-            row![disk_thumb, text(&disk_name).size(16)]
+            row![disk_thumb, text(disk_name).size(16)]
                 .spacing(10)
                 .align_y(Alignment::Center),
         )
@@ -390,10 +394,16 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
             text_color: Color::WHITE,
             ..Default::default()
         });
+
+        tab_children.push(disk_btn.into());
     }
 
-    let tab_panel =
-        container(column![cpu_btn, mem_btn, disk_btn].spacing(10).padding(10)).width(220);
+    let tab_panel = container(
+        iced::widget::Column::with_children(tab_children)
+            .spacing(10)
+            .padding(10),
+    )
+    .width(220);
 
     // Main content area
     let main_content: Element<'_, Message, Theme> = match state.selected_tab {
@@ -402,6 +412,7 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
                 data: tail(&state.cpu_history, 120),
                 color: cpu_color,
                 y_label: "CPU %",
+                max_size: 100.0,
             })
             .width(Length::Fill)
             .height(Length::Fixed(300.0))
@@ -423,6 +434,7 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
                 data: tail(&state.memory_history, 120),
                 color: mem_color,
                 y_label: "Memory %",
+                max_size: 100.0,
             })
             .width(Length::Fill)
             .height(Length::Fixed(300.0))
@@ -431,6 +443,11 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
             column![
                 chart,
                 text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
+                text(format!(
+                    "Used memory: {:.1} GB",
+                    bytes_to_gb(state.sys.used_memory())
+                ))
+                .size(18),
                 text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
             ]
             .spacing(10)
@@ -439,9 +456,10 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
         }
         SelectedTab::Disk => {
             let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                data: tail(&disk_history, 120),
+                data: tail(&state.disk_history, 120),
                 color: disk_color,
-                y_label: "Disk Usage %",
+                y_label: "MB/s",
+                max_size: 100.0,
             })
             .width(Length::Fill)
             .height(Length::Fixed(300.0))
@@ -449,8 +467,8 @@ pub fn view(state: &mut State) -> Element<'_, Message, Theme> {
 
             column![
                 chart,
-                text(format!("Disk usage: {:.1}%", state.disk_usage)).size(18),
-                text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
+                text(format!("Disk usage: {:.2} MB/s", state.disk_usage)).size(18),
+                // text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
             ]
             .spacing(10)
             .padding(20)
