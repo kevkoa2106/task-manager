@@ -1,5 +1,5 @@
-use iced::widget::{button, container, text};
-use iced::{Color, color, theme};
+use iced::widget::{button, container, scrollable, text};
+use iced::{Background, Border, Color, color, theme};
 
 #[derive(Clone, Default, Debug, PartialEq)]
 pub enum Theme {
@@ -92,6 +92,88 @@ impl container::Catalog for Theme {
 
     fn style(&self, class: &Self::Class<'_>) -> container::Style {
         class(self)
+    }
+}
+
+impl iced_table::Catalog for Theme {
+    type Style = ();
+
+    fn header(&self, _style: &Self::Style) -> container::Style {
+        let palette = self.palette();
+        container::Style {
+            text_color: Some(palette.text_fill_color_primary),
+            background: Some(Background::Color(
+                palette.solid_background_fill_color_tertiary,
+            )),
+            ..Default::default()
+        }
+    }
+
+    fn footer(&self, style: &Self::Style) -> container::Style {
+        self.header(style)
+    }
+
+    fn row(&self, _style: &Self::Style, index: usize) -> container::Style {
+        let palette = self.palette();
+        let bg = if index % 2 == 0 {
+            palette.solid_background_fill_color_base
+        } else {
+            palette.solid_background_fill_color_quarternary
+        };
+        container::Style {
+            text_color: Some(palette.text_fill_color_primary),
+            background: Some(Background::Color(bg)),
+            ..Default::default()
+        }
+    }
+
+    fn divider(&self, _style: &Self::Style, hovered: bool) -> container::Style {
+        let palette = self.palette();
+        let bg = if hovered {
+            palette.accent_fill_color_default
+        } else {
+            palette.divider_stroke_color_default
+        };
+        container::Style {
+            background: Some(Background::Color(bg)),
+            ..Default::default()
+        }
+    }
+}
+
+impl scrollable::Catalog for Theme {
+    type Class<'a> = scrollable::StyleFn<'a, Self>;
+
+    fn default<'a>() -> Self::Class<'a> {
+        Box::new(|theme: &Theme, _status| {
+            let palette = theme.palette();
+            let rail = scrollable::Rail {
+                background: Some(Background::Color(
+                    palette.solid_background_fill_color_quarternary,
+                )),
+                border: Border::default(),
+                scroller: scrollable::Scroller {
+                    background: Background::Color(palette.control_strong_fill_color_default),
+                    border: Border::default().rounded(4),
+                },
+            };
+            scrollable::Style {
+                container: container::Style::default(),
+                vertical_rail: rail,
+                horizontal_rail: rail,
+                gap: None,
+                auto_scroll: scrollable::AutoScroll {
+                    background: Background::Color(palette.solid_background_fill_color_base),
+                    border: Border::default(),
+                    shadow: iced::Shadow::default(),
+                    icon: palette.text_fill_color_primary,
+                },
+            }
+        })
+    }
+
+    fn style(&self, class: &Self::Class<'_>, status: scrollable::Status) -> scrollable::Style {
+        class(self, status)
     }
 }
 

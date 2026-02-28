@@ -1,10 +1,11 @@
 use std::time::Duration;
-use sysinfo::{Disks, System};
+use sysinfo::{Disks, ProcessesToUpdate, System};
 
 use iced::widget::{button, column, container, row, text};
-use iced::{Alignment, Background, Color, Element, Length, Subscription};
+use iced::{Alignment, Background, Color, Element, Length, Subscription, Task};
 
 use crate::charts::*;
+use crate::process_table::*;
 use crate::theme::Theme;
 use crate::utilities::*;
 use plotters::prelude::*;
@@ -34,12 +35,15 @@ pub struct State {
     memory_history: Vec<f64>,
     uptime: String,
     disks: Disks,
+    disk_size: f32,
+    disk_available_space: f32,
     disk_usage: f64,
     disk_history: Vec<f64>,
     prev_disk_read: u64,
     prev_disk_written: u64,
     selected_tab: SelectedTab,
     selected_view: SelectedView,
+    process_table: ProcessTableState,
     processes_icon: iced::widget::image::Handle,
     performance_icon: iced::widget::image::Handle,
 }
@@ -62,12 +66,15 @@ impl Default for State {
             memory_history: Vec::new(),
             uptime: String::new(),
             disks: Disks::new_with_refreshed_list(),
+            disk_size: 0.0,
+            disk_available_space: 0.0,
             disk_usage: 0.0,
             disk_history: Vec::new(),
             prev_disk_read: 0,
             prev_disk_written: 0,
             selected_tab: SelectedTab::Cpu,
             selected_view: SelectedView::Processes,
+            process_table: ProcessTableState::default(),
             processes_icon: iced::widget::image::Handle::from_bytes(
                 include_bytes!("../assets/tetris-svgrepo-com.png").as_slice(),
             ),
@@ -86,13 +93,15 @@ pub enum Message {
     SelectDisk,
     OpenProcesses,
     OpenPerformance,
+    ProcessTable(ProcessTableMessage),
 }
 
-pub fn update(state: &mut State, message: Message) {
+pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
         Message::Tick => {
             state.sys.refresh_cpu_usage();
             state.sys.refresh_memory();
+            state.sys.refresh_processes(ProcessesToUpdate::All, true);
 
             state.cpu_usage = state.sys.global_cpu_usage();
             state.cpu_history.push(state.cpu_usage as f64);
@@ -118,10 +127,14 @@ pub fn update(state: &mut State, message: Message) {
 
                 state.disk_usage = (read_delta + written_delta) as f64 / 1_000_000.0;
                 state.disk_history.push(state.disk_usage);
+                state.disk_size = bytes_to_gb(disk.total_space());
+                state.disk_available_space = bytes_to_gb(disk.available_space());
 
                 state.prev_disk_read = read;
                 state.prev_disk_written = written;
             }
+
+            state.process_table.rows = collect_processes(&state.sys);
         }
         Message::SelectCpu => {
             state.selected_tab = SelectedTab::Cpu;
@@ -138,7 +151,12 @@ pub fn update(state: &mut State, message: Message) {
         Message::OpenPerformance => {
             state.selected_view = SelectedView::Performance;
         }
+        Message::ProcessTable(msg) => {
+            return crate::process_table::update(&mut state.process_table, msg)
+                .map(Message::ProcessTable);
+        }
     }
+    Task::none()
 }
 
 fn tail(data: &[f64], max: usize) -> &[f64] {
@@ -264,9 +282,12 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
         .into();
 
         let disk_btn = button(
-            row![disk_thumb, text(disk_name).size(16)]
-                .spacing(10)
-                .align_y(Alignment::Center),
+            row![
+                disk_thumb,
+                text(disk_name).wrapping(text::Wrapping::Glyph).size(16)
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
         )
         .on_press(Message::SelectDisk)
         .width(Length::Fill)
@@ -291,89 +312,84 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
 
     // Main content area
     let main_content: Element<'_, Message, Theme> = match state.selected_view {
-        SelectedView::Processes => column![text("Processes tab")].into(),
-        SelectedView::Performance => {
-            match state.selected_tab {
-                SelectedTab::Cpu => {
-                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                        data: tail(&state.cpu_history, 120),
-                        color: cpu_color,
-                        y_label: "CPU %",
-                        max_size: 100.0,
-                    })
-                    .width(Length::Fill)
-                    .height(Length::Fixed(300.0))
-                    .into();
-
-                    column![
-                        chart,
-                        text(format!("CPU usage: {:.1}%", state.cpu_usage)).size(18),
-                        text(format!("CPU frequency: {:.2} GHz", state.cpu_frequency)).size(18),
-                        text(format!("Number of CPUs: {}", state.num_of_cpus)).size(18),
-                        text(format!("Up time: {}", state.uptime)).size(18),
-                    ]
-                    .spacing(10)
-                    .padding(20)
-                    .into()
-                }
-                SelectedTab::Memory => {
-                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                        data: tail(&state.memory_history, 120),
-                        color: mem_color,
-                        y_label: "Memory %",
-                        max_size: 100.0,
-                    })
-                    .width(Length::Fill)
-                    .height(Length::Fixed(300.0))
-                    .into();
-
-                    column![
-                        chart,
-                        text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
-                        text(format!(
-                            "Used memory: {:.1} GB",
-                            bytes_to_gb(state.sys.used_memory())
-                        ))
-                        .size(18),
-                        text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
-                    ]
-                    .spacing(10)
-                    .padding(20)
-                    .into()
-                }
-                SelectedTab::Disk => {
-                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                        data: tail(&state.disk_history, 120),
-                        color: disk_color,
-                        y_label: "MB/s",
-                        max_size: 100.0,
-                    })
-                    .width(Length::Fill)
-                    .height(Length::Fixed(300.0))
-                    .into();
-
-                    column![
-                        chart,
-                        text(format!("Disk usage: {:.2} MB/s", state.disk_usage)).size(18),
-                        // text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
-                    ]
-                    .spacing(10)
-                    .padding(20)
-                    .into()
-                }
-            }
+        SelectedView::Processes => {
+            crate::process_table::view(&state.process_table).map(Message::ProcessTable)
         }
-    };
+        SelectedView::Performance => match state.selected_tab {
+            SelectedTab::Cpu => {
+                let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                    data: tail(&state.cpu_history, 120),
+                    color: cpu_color,
+                    y_label: "CPU %",
+                    max_size: 100.0,
+                })
+                .width(Length::Fill)
+                .height(Length::Fixed(300.0))
+                .into();
 
-    // row![
-    //     sidebar,
-    //     tab_panel,
-    //     container(main_content)
-    //         .width(Length::Fill)
-    //         .height(Length::Fill)
-    // ]
-    // .height(Length::Fill)
-    // .into()
+                column![
+                    chart,
+                    text(format!("CPU usage: {:.1}%", state.cpu_usage)).size(18),
+                    text(format!("CPU frequency: {:.2} GHz", state.cpu_frequency)).size(18),
+                    text(format!("Number of CPUs: {}", state.num_of_cpus)).size(18),
+                    text(format!("Up time: {}", state.uptime)).size(18),
+                ]
+                .spacing(10)
+                .padding(20)
+                .into()
+            }
+            SelectedTab::Memory => {
+                let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                    data: tail(&state.memory_history, 120),
+                    color: mem_color,
+                    y_label: "Memory %",
+                    max_size: 100.0,
+                })
+                .width(Length::Fill)
+                .height(Length::Fixed(300.0))
+                .into();
+
+                column![
+                    chart,
+                    text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
+                    text(format!(
+                        "Used memory: {:.1} GB",
+                        bytes_to_gb(state.sys.used_memory())
+                    ))
+                    .size(18),
+                    text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
+                ]
+                .spacing(10)
+                .padding(20)
+                .into()
+            }
+            SelectedTab::Disk => {
+                let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                    data: tail(&state.disk_history, 120),
+                    color: disk_color,
+                    y_label: "MB/s",
+                    max_size: 100.0,
+                })
+                .width(Length::Fill)
+                .height(Length::Fixed(300.0))
+                .into();
+
+                column![
+                    chart,
+                    text(format!("Disk usage: {:.2} MB/s", state.disk_usage)).size(18),
+                    text(format!("Total storage: {:.2} GB", state.disk_size)).size(18),
+                    text(format!(
+                        "Available storage: {:.2} GB",
+                        state.disk_available_space
+                    ))
+                    .size(18),
+                ]
+                .spacing(10)
+                .padding(20)
+                .into()
+            }
+        },
+    };
 
     let mut children: Vec<Element<'_, Message, Theme>> = vec![sidebar.into()];
 
