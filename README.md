@@ -51,11 +51,12 @@ cargo run
 
 ```
 src/
-├── main.rs                 # Application entry point
-├── lib.rs                  # Library root
-└── taskmanager/
-    ├── mod.rs              # Module declarations
-    └── ui.rs               # UI layout, system data collection, and graph rendering
+├── main.rs        # Application entry point
+├── lib.rs         # Library root and module declarations
+├── ui.rs          # UI layout and system data collection
+├── charts.rs      # Graph rendering with plotters
+├── theme.rs       # Custom theme and styling
+└── utilities.rs   # Helper functions and utilities
 ```
 
 ## License
