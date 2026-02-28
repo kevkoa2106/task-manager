@@ -1,4 +1,4 @@
-use task_manager::taskmanager::ui::{bytes_to_gb, format_uptime, memory_usage_percent, mhz_to_ghz};
+use task_manager::utilities::{bytes_to_gb, format_uptime, memory_usage_percent, mhz_to_ghz};
 
 #[test]
 fn test_bytes_to_gb() {

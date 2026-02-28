@@ -4,33 +4,11 @@ use sysinfo::{Disks, System};
 use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Background, Color, Element, Length, Subscription};
 
-use crate::taskmanager::theme::Theme;
-use plotters::coord::Shift;
+use crate::charts::*;
+use crate::theme::Theme;
+use crate::utilities::*;
 use plotters::prelude::*;
-use plotters::style::Color as _;
-use plotters_iced2::{Chart, ChartWidget};
-
-pub fn bytes_to_gb(bytes: u64) -> f32 {
-    bytes as f32 / 1_000_000_000.0
-}
-
-pub fn memory_usage_percent(used: f64, total: f64) -> f64 {
-    if total > 0.0 {
-        (used / total) * 100.0
-    } else {
-        0.0
-    }
-}
-
-pub fn format_uptime(seconds: u64) -> String {
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    format!("{hours}:{minutes}    Total in secs: {seconds}")
-}
-
-pub fn mhz_to_ghz(mhz: u64) -> f32 {
-    mhz as f32 / 1000.0
-}
+use plotters_iced2::ChartWidget;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectedTab {
@@ -83,10 +61,10 @@ impl Default for State {
             prev_disk_written: 0,
             selected_tab: SelectedTab::Cpu,
             processes_icon: iced::widget::image::Handle::from_bytes(
-                include_bytes!("../../assets/tetris-svgrepo-com.png").as_slice(),
+                include_bytes!("../assets/tetris-svgrepo-com.png").as_slice(),
             ),
             performance_icon: iced::widget::image::Handle::from_bytes(
-                include_bytes!("../../assets/image-removebg-preview.png").as_slice(),
+                include_bytes!("../assets/image-removebg-preview.png").as_slice(),
             ),
         }
     }
@@ -100,108 +78,6 @@ pub enum Message {
     SelectDisk,
     OpenProcesses,
     OpenPerformance,
-}
-
-// Thumbnail chart (no axes, used in tab selector buttons)
-
-struct ThumbChart<'a> {
-    data: &'a [f64],
-    color: RGBColor,
-}
-
-impl<'a> Chart<Message> for ThumbChart<'a> {
-    type State = ();
-
-    fn draw_chart<DB: DrawingBackend>(&self, state: &Self::State, root: DrawingArea<DB, Shift>) {
-        root.fill(&RGBColor(25, 25, 38)).unwrap();
-        self.build_chart(state, ChartBuilder::on(&root));
-    }
-
-    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
-        let x_max = if self.data.len() > 1 {
-            (self.data.len() - 1) as f64
-        } else {
-            1.0
-        };
-
-        let mut chart = builder
-            .margin(2)
-            .build_cartesian_2d(0f64..x_max, 0f64..100f64)
-            .expect("failed to build thumb chart");
-
-        chart
-            .configure_mesh()
-            .disable_mesh()
-            .disable_axes()
-            .draw()
-            .expect("failed to draw thumb mesh");
-
-        if !self.data.is_empty() {
-            chart
-                .draw_series(LineSeries::new(
-                    self.data.iter().enumerate().map(|(i, &v)| (i as f64, v)),
-                    ShapeStyle::from(self.color).stroke_width(2),
-                ))
-                .expect("failed to draw thumb series");
-        }
-    }
-}
-
-// Detail chart
-
-struct DetailChart<'a> {
-    data: &'a [f64],
-    color: RGBColor,
-    y_label: &'a str,
-    max_size: f64,
-}
-
-impl<'a> Chart<Message> for DetailChart<'a> {
-    type State = ();
-
-    fn draw_chart<DB: DrawingBackend>(&self, state: &Self::State, root: DrawingArea<DB, Shift>) {
-        root.fill(&RGBColor(25, 25, 38)).unwrap();
-        self.build_chart(state, ChartBuilder::on(&root));
-    }
-
-    fn build_chart<DB: DrawingBackend>(&self, _state: &Self::State, mut builder: ChartBuilder<DB>) {
-        let x_max = if self.data.len() > 1 {
-            (self.data.len() - 1) as f64
-        } else {
-            1.0
-        };
-
-        let mut chart = builder
-            .x_label_area_size(30)
-            .y_label_area_size(40)
-            .margin(10)
-            .build_cartesian_2d(0f64..x_max, 0f64..self.max_size)
-            .expect("failed to build detail chart");
-
-        chart
-            .configure_mesh()
-            .label_style(("sans-serif", 12, &WHITE))
-            .bold_line_style(WHITE.mix(0.1))
-            .light_line_style(WHITE.mix(0.05))
-            .axis_style(WHITE.mix(0.3))
-            .x_desc("Time (s)")
-            .y_desc(self.y_label)
-            .draw()
-            .expect("failed to draw detail mesh");
-
-        if !self.data.is_empty() {
-            chart
-                .draw_series(
-                    AreaSeries::new(
-                        self.data.iter().enumerate().map(|(i, &v)| (i as f64, v)),
-                        0.0,
-                        self.color.mix(0.2),
-                    )
-                    .border_style(ShapeStyle::from(self.color).stroke_width(2)),
-                )
-                .expect("failed to draw detail series");
-        }
-    }
 }
 
 pub fn update(state: &mut State, message: Message) {

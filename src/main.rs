@@ -1,5 +1,5 @@
-use task_manager::taskmanager::theme::Theme;
-use task_manager::taskmanager::ui::*;
+use task_manager::theme::Theme;
+use task_manager::ui::*;
 
 fn theme(_state: &State) -> Theme {
     Theme::Dark
