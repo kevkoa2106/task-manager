@@ -11,6 +11,12 @@ use plotters::prelude::*;
 use plotters_iced2::ChartWidget;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SelectedView {
+    Processes,
+    Performance,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectedTab {
     Cpu,
     Memory,
@@ -33,6 +39,7 @@ pub struct State {
     prev_disk_read: u64,
     prev_disk_written: u64,
     selected_tab: SelectedTab,
+    selected_view: SelectedView,
     processes_icon: iced::widget::image::Handle,
     performance_icon: iced::widget::image::Handle,
 }
@@ -60,6 +67,7 @@ impl Default for State {
             prev_disk_read: 0,
             prev_disk_written: 0,
             selected_tab: SelectedTab::Cpu,
+            selected_view: SelectedView::Processes,
             processes_icon: iced::widget::image::Handle::from_bytes(
                 include_bytes!("../assets/tetris-svgrepo-com.png").as_slice(),
             ),
@@ -125,10 +133,10 @@ pub fn update(state: &mut State, message: Message) {
             state.selected_tab = SelectedTab::Disk;
         }
         Message::OpenProcesses => {
-            todo!()
+            state.selected_view = SelectedView::Processes;
         }
         Message::OpenPerformance => {
-            todo!()
+            state.selected_view = SelectedView::Performance;
         }
     }
 }
@@ -282,86 +290,107 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
     .width(220);
 
     // Main content area
-    let main_content: Element<'_, Message, Theme> = match state.selected_tab {
-        SelectedTab::Cpu => {
-            let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                data: tail(&state.cpu_history, 120),
-                color: cpu_color,
-                y_label: "CPU %",
-                max_size: 100.0,
-            })
-            .width(Length::Fill)
-            .height(Length::Fixed(300.0))
-            .into();
+    let main_content: Element<'_, Message, Theme> = match state.selected_view {
+        SelectedView::Processes => column![text("Processes tab")].into(),
+        SelectedView::Performance => {
+            match state.selected_tab {
+                SelectedTab::Cpu => {
+                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                        data: tail(&state.cpu_history, 120),
+                        color: cpu_color,
+                        y_label: "CPU %",
+                        max_size: 100.0,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fixed(300.0))
+                    .into();
 
-            column![
-                chart,
-                text(format!("CPU usage: {:.1}%", state.cpu_usage)).size(18),
-                text(format!("CPU frequency: {:.2} GHz", state.cpu_frequency)).size(18),
-                text(format!("Number of CPUs: {}", state.num_of_cpus)).size(18),
-                text(format!("Up time: {}", state.uptime)).size(18),
-            ]
-            .spacing(10)
-            .padding(20)
-            .into()
-        }
-        SelectedTab::Memory => {
-            let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                data: tail(&state.memory_history, 120),
-                color: mem_color,
-                y_label: "Memory %",
-                max_size: 100.0,
-            })
-            .width(Length::Fill)
-            .height(Length::Fixed(300.0))
-            .into();
+                    column![
+                        chart,
+                        text(format!("CPU usage: {:.1}%", state.cpu_usage)).size(18),
+                        text(format!("CPU frequency: {:.2} GHz", state.cpu_frequency)).size(18),
+                        text(format!("Number of CPUs: {}", state.num_of_cpus)).size(18),
+                        text(format!("Up time: {}", state.uptime)).size(18),
+                    ]
+                    .spacing(10)
+                    .padding(20)
+                    .into()
+                }
+                SelectedTab::Memory => {
+                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                        data: tail(&state.memory_history, 120),
+                        color: mem_color,
+                        y_label: "Memory %",
+                        max_size: 100.0,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fixed(300.0))
+                    .into();
 
-            column![
-                chart,
-                text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
-                text(format!(
-                    "Used memory: {:.1} GB",
-                    bytes_to_gb(state.sys.used_memory())
-                ))
-                .size(18),
-                text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
-            ]
-            .spacing(10)
-            .padding(20)
-            .into()
-        }
-        SelectedTab::Disk => {
-            let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
-                data: tail(&state.disk_history, 120),
-                color: disk_color,
-                y_label: "MB/s",
-                max_size: 100.0,
-            })
-            .width(Length::Fill)
-            .height(Length::Fixed(300.0))
-            .into();
+                    column![
+                        chart,
+                        text(format!("Memory usage: {:.1}%", state.memory_usage)).size(18),
+                        text(format!(
+                            "Used memory: {:.1} GB",
+                            bytes_to_gb(state.sys.used_memory())
+                        ))
+                        .size(18),
+                        text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
+                    ]
+                    .spacing(10)
+                    .padding(20)
+                    .into()
+                }
+                SelectedTab::Disk => {
+                    let chart: Element<'_, Message, Theme> = ChartWidget::new(DetailChart {
+                        data: tail(&state.disk_history, 120),
+                        color: disk_color,
+                        y_label: "MB/s",
+                        max_size: 100.0,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fixed(300.0))
+                    .into();
 
-            column![
-                chart,
-                text(format!("Disk usage: {:.2} MB/s", state.disk_usage)).size(18),
-                // text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
-            ]
-            .spacing(10)
-            .padding(20)
-            .into()
+                    column![
+                        chart,
+                        text(format!("Disk usage: {:.2} MB/s", state.disk_usage)).size(18),
+                        // text(format!("Total memory: {:.1} GB", state.total_mem)).size(18),
+                    ]
+                    .spacing(10)
+                    .padding(20)
+                    .into()
+                }
+            }
         }
     };
 
-    // Combine into a row layout
-    row![
-        sidebar,
-        tab_panel,
+    // row![
+    //     sidebar,
+    //     tab_panel,
+    //     container(main_content)
+    //         .width(Length::Fill)
+    //         .height(Length::Fill)
+    // ]
+    // .height(Length::Fill)
+    // .into()
+
+    let mut children: Vec<Element<'_, Message, Theme>> = vec![sidebar.into()];
+
+    if state.selected_view == SelectedView::Performance {
+        children.push(tab_panel.into());
+    }
+
+    children.push(
         container(main_content)
             .width(Length::Fill)
             .height(Length::Fill)
-    ]
-    .height(Length::Fill)
-    .into()
+            .into(),
+    );
+
+    iced::widget::Row::with_children(children)
+        .height(Length::Fill)
+        .into()
 }
 
 pub fn subscription(_state: &State) -> Subscription<Message> {
