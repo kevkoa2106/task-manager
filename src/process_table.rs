@@ -7,7 +7,7 @@ use iced::{Element, Length, Renderer, Task};
 use iced_table::table;
 use sysinfo::System;
 
-use crate::theme::Theme;
+use crate::theme::{TableStyle, Theme};
 
 pub struct ProcessInfo {
     pub pid: u32,
@@ -54,11 +54,13 @@ pub enum ProcessTableMessage {
     SyncHeader(AbsoluteOffset),
     Resizing(usize, f32),
     Resized,
+    RowSelected(u32),
 }
 
 pub struct ProcessTableState {
     pub columns: Vec<ProcessColumn>,
     pub rows: Vec<ProcessInfo>,
+    pub selected_pid: Option<u32>,
     pub header: iced::widget::Id,
     pub body: iced::widget::Id,
     pub footer: iced::widget::Id,
@@ -75,6 +77,7 @@ impl Default for ProcessTableState {
                 ProcessColumn::new(ProcessColumnKind::DiskUsage),
             ],
             rows: Vec::new(),
+            selected_pid: None,
             header: iced::widget::Id::unique(),
             body: iced::widget::Id::unique(),
             footer: iced::widget::Id::unique(),
@@ -105,12 +108,19 @@ pub fn update(
                 }
             }
         }
+        ProcessTableMessage::RowSelected(pid) => {
+            state.selected_pid = Some(pid);
+        }
     }
     Task::none()
 }
 
 pub fn view(state: &ProcessTableState) -> Element<'_, ProcessTableMessage, Theme> {
-    responsive(|size| {
+    let selected_row = state.selected_pid.and_then(|pid| {
+        state.rows.iter().position(|r| r.pid == pid)
+    });
+
+    responsive(move |size| {
         let table = table(
             state.header.clone(),
             state.body.clone(),
@@ -119,7 +129,8 @@ pub fn view(state: &ProcessTableState) -> Element<'_, ProcessTableMessage, Theme
             ProcessTableMessage::SyncHeader,
         )
         .on_column_resize(ProcessTableMessage::Resizing, ProcessTableMessage::Resized)
-        .min_width(size.width);
+        .min_width(size.width)
+        .style(TableStyle { selected_row });
 
         table.into()
     })
@@ -179,7 +190,10 @@ impl<'a> table::Column<'a, ProcessTableMessage, Theme, Renderer> for ProcessColu
             }
         };
 
-        container(content).width(Length::Fill).into()
+        let pid = row.pid;
+        iced::widget::mouse_area(container(content).width(Length::Fill))
+            .on_press(ProcessTableMessage::RowSelected(pid))
+            .into()
     }
 
     fn width(&self) -> f32 {

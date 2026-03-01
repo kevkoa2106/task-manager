@@ -1,5 +1,5 @@
 use std::time::Duration;
-use sysinfo::{Disks, ProcessesToUpdate, System};
+use sysinfo::{Disks, Pid, ProcessesToUpdate, System};
 
 use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Background, Color, Element, Length, Subscription, Task};
@@ -93,6 +93,7 @@ pub enum Message {
     SelectDisk,
     OpenProcesses,
     OpenPerformance,
+    EndTask,
     ProcessTable(ProcessTableMessage),
 }
 
@@ -150,6 +151,14 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::OpenPerformance => {
             state.selected_view = SelectedView::Performance;
+        }
+        Message::EndTask => {
+            if let Some(pid) = state.process_table.selected_pid {
+                if let Some(process) = state.sys.process(Pid::from_u32(pid)) {
+                    process.kill();
+                }
+                state.process_table.selected_pid = None;
+            }
         }
         Message::ProcessTable(msg) => {
             return crate::process_table::update(&mut state.process_table, msg)
@@ -313,7 +322,26 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
     // Main content area
     let main_content: Element<'_, Message, Theme> = match state.selected_view {
         SelectedView::Processes => {
-            crate::process_table::view(&state.process_table).map(Message::ProcessTable)
+            let end_btn = button(text("End Task").size(18.0).color(Color::BLACK))
+                .on_press(Message::EndTask)
+                .style(|_, status| button::Style {
+                    background: Some(Background::Color(match status {
+                        button::Status::Hovered => {
+                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725)
+                        }
+                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+                    })),
+                    text_color: Color::WHITE,
+                    ..Default::default()
+                });
+
+            column![
+                end_btn,
+                crate::process_table::view(&state.process_table).map(Message::ProcessTable),
+            ]
+            .spacing(10)
+            .padding(20)
+            .into()
         }
         SelectedView::Performance => match state.selected_tab {
             SelectedTab::Cpu => {

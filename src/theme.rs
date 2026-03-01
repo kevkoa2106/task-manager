@@ -95,8 +95,13 @@ impl container::Catalog for Theme {
     }
 }
 
+#[derive(Default, Clone)]
+pub struct TableStyle {
+    pub selected_row: Option<usize>,
+}
+
 impl iced_table::Catalog for Theme {
-    type Style = ();
+    type Style = TableStyle;
 
     fn header(&self, _style: &Self::Style) -> container::Style {
         let palette = self.palette();
@@ -113,9 +118,11 @@ impl iced_table::Catalog for Theme {
         self.header(style)
     }
 
-    fn row(&self, _style: &Self::Style, index: usize) -> container::Style {
+    fn row(&self, style: &Self::Style, index: usize) -> container::Style {
         let palette = self.palette();
-        let bg = if index % 2 == 0 {
+        let bg = if style.selected_row == Some(index) {
+            palette.accent_fill_color_default
+        } else if index % 2 == 0 {
             palette.solid_background_fill_color_base
         } else {
             palette.solid_background_fill_color_quarternary
