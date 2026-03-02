@@ -42,8 +42,7 @@ cargo run
 If the mac app version doesn't allow you to open it, please try opening the terminal and try this:
 
 ```sh
-# open the terminal and navigate to the folder containing the .app file
-chmod +x Task Manager Mac.app/Contents/MacOS/task-manager
+xattr -cr "/path/to/Task Manager Mac.app"
 ```
 
 ## Dependencies
