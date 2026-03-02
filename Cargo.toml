@@ -1,7 +1,24 @@
 [package]
 name = "task-manager"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
+
+[package.metadata.bundle]
+name = "Task Manager Mac"
+identifier = "com.khoa.taskmanager"
+version = "0.1.2"
+resources = ["assets", "config.toml"]
+icon = [
+    "assets/icons/32x32.png",
+    "assets/icons/128x128.png",
+    "assets/icons/icon.icns",
+]
+copyright = "Copyright (c) 2026. All rights reserved."
+category = "Developer Tool"
+short_description = "Task manager"
+long_description = """
+Task manager that is built with rust
+"""
 
 [dependencies]
 sysinfo = "0.38.2"
