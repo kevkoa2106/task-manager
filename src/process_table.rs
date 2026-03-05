@@ -4,7 +4,7 @@ use iced::widget::operation::scroll_to;
 use iced::widget::scrollable::AbsoluteOffset;
 use iced::widget::{container, responsive, text};
 use iced::{Element, Length, Renderer, Task};
-use iced_table::table;
+use iced_table2::table;
 use sysinfo::System;
 
 use crate::theme::{TableStyle, Theme};
@@ -116,9 +116,9 @@ pub fn update(
 }
 
 pub fn view(state: &ProcessTableState) -> Element<'_, ProcessTableMessage, Theme> {
-    let selected_row = state.selected_pid.and_then(|pid| {
-        state.rows.iter().position(|r| r.pid == pid)
-    });
+    let selected_row = state
+        .selected_pid
+        .and_then(|pid| state.rows.iter().position(|r| r.pid == pid));
 
     responsive(move |size| {
         let table = table(

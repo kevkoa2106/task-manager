@@ -100,7 +100,7 @@ pub struct TableStyle {
     pub selected_row: Option<usize>,
 }
 
-impl iced_table::Catalog for Theme {
+impl iced_table2::Catalog for Theme {
     type Style = TableStyle;
 
     fn header(&self, _style: &Self::Style) -> container::Style {

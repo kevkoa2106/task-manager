@@ -54,6 +54,7 @@ xattr -cr "/path/to/Task Manager Mac.app"
 | [plotters](https://crates.io/crates/plotters) | Plotting library for charts |
 | [sysinfo](https://crates.io/crates/sysinfo) | Cross-platform system information (CPU, memory, uptime) |
 | [image](https://crates.io/crates/image) | Image processing |
+| [iced_table2](https://crates.io/crates/iced_table2) | Table widget to iced 0.14 |
 
 ## Project Structure
 
