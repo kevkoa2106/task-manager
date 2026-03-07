@@ -1,8 +1,8 @@
 use task_manager::theme::Theme;
 use task_manager::ui::*;
 
-fn theme(_state: &State) -> Theme {
-    Theme::Dark
+fn theme(state: &State) -> Theme {
+    state.theme_selected.unwrap()
 }
 
 fn main() -> iced::Result {

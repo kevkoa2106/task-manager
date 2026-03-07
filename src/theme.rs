@@ -1,7 +1,8 @@
-use iced::widget::{button, container, scrollable, text};
+use iced::overlay::menu;
+use iced::widget::{button, container, pick_list, scrollable, text, text_input};
 use iced::{Background, Border, Color, color, theme};
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Theme {
     Light,
     #[default]
@@ -15,6 +16,8 @@ impl Theme {
             Theme::Light => &Palette::LIGHT,
         }
     }
+
+    pub const ALL: [Theme; 2] = [Theme::Light, Theme::Dark];
 }
 
 impl std::fmt::Display for Theme {
@@ -92,6 +95,51 @@ impl container::Catalog for Theme {
 
     fn style(&self, class: &Self::Class<'_>) -> container::Style {
         class(self)
+    }
+}
+
+impl text_input::Catalog for Theme {
+    type Class<'a> = text_input::StyleFn<'a, Self>;
+
+    fn default<'a>() -> Self::Class<'a> {
+        Box::new(|theme: &Theme, status| {
+            let palette = theme.palette();
+            let base = text_input::Style {
+                background: Background::Color(palette.control_fill_color_default),
+                border: Border::default()
+                    .rounded(4)
+                    .width(1)
+                    .color(palette.control_stroke_color_default),
+                icon: palette.text_fill_color_secondary,
+                placeholder: palette.text_fill_color_disabled,
+                value: palette.text_fill_color_primary,
+                selection: palette.accent_fill_color_default,
+            };
+            match status {
+                text_input::Status::Active => base,
+                text_input::Status::Hovered => text_input::Style {
+                    background: Background::Color(palette.control_fill_color_secondary),
+                    ..base
+                },
+                text_input::Status::Focused { .. } => text_input::Style {
+                    background: Background::Color(palette.control_fill_color_input_active),
+                    border: Border::default()
+                        .rounded(4)
+                        .width(1)
+                        .color(palette.accent_fill_color_default),
+                    ..base
+                },
+                text_input::Status::Disabled => text_input::Style {
+                    background: Background::Color(palette.control_fill_color_disabled),
+                    value: palette.text_fill_color_disabled,
+                    ..base
+                },
+            }
+        })
+    }
+
+    fn style(&self, class: &Self::Class<'_>, status: text_input::Status) -> text_input::Style {
+        class(self, status)
     }
 }
 
@@ -180,6 +228,74 @@ impl scrollable::Catalog for Theme {
     }
 
     fn style(&self, class: &Self::Class<'_>, status: scrollable::Status) -> scrollable::Style {
+        class(self, status)
+    }
+}
+
+impl menu::Catalog for Theme {
+    type Class<'a> = menu::StyleFn<'a, Self>;
+
+    fn default<'a>() -> <Self as menu::Catalog>::Class<'a> {
+        Box::new(|theme: &Theme| {
+            let palette = theme.palette();
+            menu::Style {
+                background: Background::Color(palette.control_fill_color_default),
+                border: Border::default()
+                    .rounded(4)
+                    .width(1)
+                    .color(palette.control_stroke_color_default),
+                text_color: palette.text_fill_color_primary,
+                selected_text_color: palette.text_on_accent_fill_color_primary,
+                selected_background: Background::Color(palette.accent_fill_color_default),
+                shadow: iced::Shadow::default(),
+            }
+        })
+    }
+
+    fn style(&self, class: &<Self as menu::Catalog>::Class<'_>) -> menu::Style {
+        class(self)
+    }
+}
+
+impl pick_list::Catalog for Theme {
+    type Class<'a> = pick_list::StyleFn<'a, Self>;
+
+    fn default<'a>() -> <Self as pick_list::Catalog>::Class<'a> {
+        Box::new(|theme: &Theme, status| {
+            let palette = theme.palette();
+            let base = pick_list::Style {
+                text_color: palette.text_fill_color_primary,
+                placeholder_color: palette.text_fill_color_secondary,
+                handle_color: palette.text_fill_color_secondary,
+                background: Background::Color(palette.control_fill_color_default),
+                border: Border::default()
+                    .rounded(4)
+                    .width(1)
+                    .color(palette.control_stroke_color_default),
+            };
+            match status {
+                pick_list::Status::Active => base,
+                pick_list::Status::Hovered => pick_list::Style {
+                    background: Background::Color(palette.control_fill_color_secondary),
+                    ..base
+                },
+                pick_list::Status::Opened { .. } => pick_list::Style {
+                    background: Background::Color(palette.control_fill_color_tertiary),
+                    border: Border::default()
+                        .rounded(4)
+                        .width(1)
+                        .color(palette.accent_fill_color_default),
+                    ..base
+                },
+            }
+        })
+    }
+
+    fn style(
+        &self,
+        class: &<Self as pick_list::Catalog>::Class<'_>,
+        status: pick_list::Status,
+    ) -> pick_list::Style {
         class(self, status)
     }
 }

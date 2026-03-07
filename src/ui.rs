@@ -1,7 +1,7 @@
 use std::time::Duration;
 use sysinfo::{Disks, Pid, ProcessesToUpdate, System};
 
-use iced::widget::{button, column, container, row, text};
+use iced::widget::{Space, button, column, container, pick_list, row, text, text_input};
 use iced::{Alignment, Background, Color, Element, Length, Subscription, Task};
 
 use crate::charts::*;
@@ -15,6 +15,7 @@ use plotters_iced2::ChartWidget;
 pub enum SelectedView {
     Processes,
     Performance,
+    Settings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +26,7 @@ pub enum SelectedTab {
 }
 
 pub struct State {
+    pub theme_selected: Option<Theme>,
     sys: System,
     total_mem: f32,
     cpu_usage: f32,
@@ -46,6 +48,7 @@ pub struct State {
     process_table: ProcessTableState,
     processes_icon: iced::widget::image::Handle,
     performance_icon: iced::widget::image::Handle,
+    settings_icon: iced::widget::image::Handle,
 }
 
 impl Default for State {
@@ -56,6 +59,7 @@ impl Default for State {
         let num_of_cpus = sys.cpus().len() as i32;
 
         Self {
+            theme_selected: Some(crate::theme::Theme::Dark),
             sys,
             total_mem,
             cpu_usage: 0.0,
@@ -81,6 +85,9 @@ impl Default for State {
             performance_icon: iced::widget::image::Handle::from_bytes(
                 include_bytes!("../assets/image-removebg-preview.png").as_slice(),
             ),
+            settings_icon: iced::widget::image::Handle::from_bytes(
+                include_bytes!("../assets/icons8-settings-52.png").as_slice(),
+            ),
         }
     }
 }
@@ -93,8 +100,10 @@ pub enum Message {
     SelectDisk,
     OpenProcesses,
     OpenPerformance,
+    OpenSettings,
     EndTask,
     ProcessTable(ProcessTableMessage),
+    ThemeSelected(Theme),
 }
 
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
@@ -136,6 +145,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             }
 
             state.process_table.rows = collect_processes(&state.sys);
+            crate::process_table::apply_filter(&mut state.process_table);
         }
         Message::SelectCpu => {
             state.selected_tab = SelectedTab::Cpu;
@@ -152,6 +162,9 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         Message::OpenPerformance => {
             state.selected_view = SelectedView::Performance;
         }
+        Message::OpenSettings => {
+            state.selected_view = SelectedView::Settings;
+        }
         Message::EndTask => {
             if let Some(pid) = state.process_table.selected_pid {
                 if let Some(process) = state.sys.process(Pid::from_u32(pid)) {
@@ -164,6 +177,7 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
             return crate::process_table::update(&mut state.process_table, msg)
                 .map(Message::ProcessTable);
         }
+        Message::ThemeSelected(theme) => state.theme_selected = Some(theme),
     }
     Task::none()
 }
@@ -190,43 +204,95 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
         .width(30)
         .height(30);
 
-    let processes_btn = button(processes_icon)
-        .width(50)
-        .height(50)
-        .on_press(Message::OpenProcesses)
-        .style(|_, status| button::Style {
-            background: Some(Background::Color(match status {
-                button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-                _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-            })),
-            text_color: Color::WHITE,
-            ..Default::default()
-        });
+    let settings_icon = iced::widget::image(state.settings_icon.clone())
+        .width(30)
+        .height(30);
 
-    let performance_btn = button(performance_icon)
+    let mut processes_btn = button(processes_icon)
         .width(50)
         .height(50)
-        .on_press(Message::OpenPerformance)
-        .style(|_: &Theme, status| button::Style {
-            background: Some(Background::Color(match status {
-                button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-                _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-            })),
-            text_color: Color::WHITE,
-            ..Default::default()
-        });
+        .on_press(Message::OpenProcesses);
+
+    let mut performance_btn = button(performance_icon)
+        .width(50)
+        .height(50)
+        .on_press(Message::OpenPerformance);
+
+    let mut settings_btn = button(settings_icon)
+        .width(50)
+        .height(50)
+        .on_press(Message::OpenSettings);
+
+    match state.theme_selected {
+        Some(Theme::Dark) => {
+            processes_btn = processes_btn.style(|_, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => DARK_THEME_HOVER,
+                    _ => DARK_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+
+            performance_btn = performance_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => DARK_THEME_HOVER,
+                    _ => DARK_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+
+            settings_btn = settings_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => DARK_THEME_HOVER,
+                    _ => DARK_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+        }
+        Some(Theme::Light) => {
+            processes_btn = processes_btn.style(|_, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => LIGHT_THEME_HOVER,
+                    _ => LIGHT_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+
+            performance_btn = performance_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => LIGHT_THEME_HOVER,
+                    _ => LIGHT_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+
+            settings_btn = settings_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => LIGHT_THEME_HOVER,
+                    _ => LIGHT_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+        }
+        None => {}
+    }
 
     let sidebar = container(
-        column![processes_btn, performance_btn,]
-            .spacing(10)
-            .padding(5),
-    )
-    .style(|_: &_| container::Style {
-        background: Some(Background::Color(Color::from_rgb(
-            0.09803922, 0.09803922, 0.14901961,
-        ))),
-        ..Default::default()
-    });
+        column![
+            processes_btn,
+            performance_btn,
+            Space::new().height(Length::Fill),
+            settings_btn
+        ]
+        .spacing(10)
+        .padding(5),
+    );
 
     // Tab selector panel
     let cpu_thumb: Element<'_, Message, Theme> = ChartWidget::new(ThumbChart {
@@ -245,37 +311,63 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
     .height(Length::Fixed(50.0))
     .into();
 
-    let cpu_btn = button(
+    let mut cpu_btn = button(
         row![cpu_thumb, text("CPU").size(16)]
             .spacing(10)
             .align_y(Alignment::Center),
     )
     .on_press(Message::SelectCpu)
-    .width(Length::Fill)
-    .style(|_, status| button::Style {
-        background: Some(Background::Color(match status {
-            button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-            _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-        })),
-        text_color: Color::WHITE,
-        ..Default::default()
-    });
+    .width(Length::Fill);
 
-    let mem_btn = button(
+    let mut mem_btn = button(
         row![mem_thumb, text("Memory").size(16)]
             .spacing(10)
             .align_y(Alignment::Center),
     )
     .on_press(Message::SelectMemory)
-    .width(Length::Fill)
-    .style(|_, status| button::Style {
-        background: Some(Background::Color(match status {
-            button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-            _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-        })),
-        text_color: Color::WHITE,
-        ..Default::default()
-    });
+    .width(Length::Fill);
+
+    match state.theme_selected {
+        Some(Theme::Light) => {
+            cpu_btn = cpu_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => LIGHT_THEME_HOVER,
+                    _ => LIGHT_THEME_IDLE,
+                })),
+                text_color: Color::BLACK,
+                ..Default::default()
+            });
+
+            mem_btn = mem_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => LIGHT_THEME_HOVER,
+                    _ => LIGHT_THEME_IDLE,
+                })),
+                text_color: Color::BLACK,
+                ..Default::default()
+            });
+        }
+        Some(Theme::Dark) => {
+            cpu_btn = cpu_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => DARK_THEME_HOVER,
+                    _ => DARK_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+
+            mem_btn = mem_btn.style(|_: &Theme, status| button::Style {
+                background: Some(Background::Color(match status {
+                    button::Status::Hovered => DARK_THEME_HOVER,
+                    _ => DARK_THEME_IDLE,
+                })),
+                text_color: Color::WHITE,
+                ..Default::default()
+            });
+        }
+        None => {}
+    }
 
     let mut tab_children: Vec<Element<'_, Message, Theme>> = vec![cpu_btn.into(), mem_btn.into()];
 
@@ -290,7 +382,7 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
         .height(Length::Fixed(50.0))
         .into();
 
-        let disk_btn = button(
+        let mut disk_btn = button(
             row![
                 disk_thumb,
                 text(disk_name).wrapping(text::Wrapping::Glyph).size(16)
@@ -299,15 +391,31 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
             .align_y(Alignment::Center),
         )
         .on_press(Message::SelectDisk)
-        .width(Length::Fill)
-        .style(|_, status| button::Style {
-            background: Some(Background::Color(match status {
-                button::Status::Hovered => Color::from_rgb(0.59215686, 0.60784314, 0.64313725),
-                _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
-            })),
-            text_color: Color::WHITE,
-            ..Default::default()
-        });
+        .width(Length::Fill);
+
+        match state.theme_selected {
+            Some(Theme::Light) => {
+                disk_btn = disk_btn.style(|_: &Theme, status| button::Style {
+                    background: Some(Background::Color(match status {
+                        button::Status::Hovered => LIGHT_THEME_HOVER,
+                        _ => LIGHT_THEME_IDLE,
+                    })),
+                    text_color: Color::BLACK,
+                    ..Default::default()
+                });
+            }
+            Some(Theme::Dark) => {
+                disk_btn = disk_btn.style(|_: &Theme, status| button::Style {
+                    background: Some(Background::Color(match status {
+                        button::Status::Hovered => DARK_THEME_HOVER,
+                        _ => DARK_THEME_IDLE,
+                    })),
+                    text_color: Color::WHITE,
+                    ..Default::default()
+                });
+            }
+            None => {}
+        }
 
         tab_children.push(disk_btn.into());
     }
@@ -322,21 +430,52 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
     // Main content area
     let main_content: Element<'_, Message, Theme> = match state.selected_view {
         SelectedView::Processes => {
-            let end_btn = button(text("End Task").size(18.0).color(Color::BLACK))
+            let mut end_btn = button(text("End Task").size(18.0).color(Color::BLACK))
                 .on_press(Message::EndTask)
                 .style(|_, status| button::Style {
                     background: Some(Background::Color(match status {
-                        button::Status::Hovered => {
-                            Color::from_rgb(0.59215686, 0.60784314, 0.64313725)
-                        }
-                        _ => Color::from_rgb(0.53333333, 0.54117647, 0.56470588),
+                        button::Status::Hovered => DARK_THEME_HOVER,
+                        _ => DARK_THEME_IDLE,
                     })),
                     text_color: Color::WHITE,
                     ..Default::default()
                 });
 
+            match state.theme_selected {
+                Some(Theme::Light) => {
+                    end_btn = end_btn.style(|_: &Theme, status| button::Style {
+                        background: Some(Background::Color(match status {
+                            button::Status::Hovered => LIGHT_THEME_HOVER,
+                            _ => LIGHT_THEME_IDLE,
+                        })),
+                        text_color: Color::WHITE,
+                        ..Default::default()
+                    });
+                }
+                Some(Theme::Dark) => {
+                    end_btn = end_btn.style(|_: &Theme, status| button::Style {
+                        background: Some(Background::Color(match status {
+                            button::Status::Hovered => DARK_THEME_HOVER,
+                            _ => DARK_THEME_IDLE,
+                        })),
+                        text_color: Color::WHITE,
+                        ..Default::default()
+                    });
+                }
+                None => {}
+            }
+
+            let search_input = text_input("Search processes...", &state.process_table.search_query)
+                .on_input(|s| Message::ProcessTable(ProcessTableMessage::SearchChanged(s)))
+                .width(200);
+
+            let space_on_top = container(
+                row![end_btn, Space::new().width(Length::Fill), search_input]
+                    .align_y(Alignment::Center),
+            );
+
             column![
-                end_btn,
+                space_on_top,
                 crate::process_table::view(&state.process_table).map(Message::ProcessTable),
             ]
             .spacing(10)
@@ -417,6 +556,18 @@ pub fn view(state: &State) -> Element<'_, Message, Theme> {
                 .into()
             }
         },
+        SelectedView::Settings => {
+            let themes = pick_list(Theme::ALL, state.theme_selected, Message::ThemeSelected)
+                .placeholder("Choose a theme...");
+
+            let theme_choose = row![text("Theme: ").size(18), Space::new().width(10), themes]
+                .align_y(iced::Center);
+
+            column![theme_choose]
+                .width(Length::Fill)
+                .align_x(iced::Center)
+                .into()
+        }
     };
 
     let mut children: Vec<Element<'_, Message, Theme>> = vec![sidebar.into()];

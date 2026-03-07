@@ -9,6 +9,7 @@ use sysinfo::System;
 
 use crate::theme::{TableStyle, Theme};
 
+#[derive(Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
@@ -55,15 +56,18 @@ pub enum ProcessTableMessage {
     Resizing(usize, f32),
     Resized,
     RowSelected(u32),
+    SearchChanged(String),
 }
 
 pub struct ProcessTableState {
     pub columns: Vec<ProcessColumn>,
     pub rows: Vec<ProcessInfo>,
+    pub filtered_rows: Vec<ProcessInfo>,
     pub selected_pid: Option<u32>,
     pub header: iced::widget::Id,
     pub body: iced::widget::Id,
     pub footer: iced::widget::Id,
+    pub search_query: String,
 }
 
 impl Default for ProcessTableState {
@@ -77,10 +81,12 @@ impl Default for ProcessTableState {
                 ProcessColumn::new(ProcessColumnKind::DiskUsage),
             ],
             rows: Vec::new(),
+            filtered_rows: Vec::new(),
             selected_pid: None,
             header: iced::widget::Id::unique(),
             body: iced::widget::Id::unique(),
             footer: iced::widget::Id::unique(),
+            search_query: String::new(),
         }
     }
 }
@@ -111,21 +117,42 @@ pub fn update(
         ProcessTableMessage::RowSelected(pid) => {
             state.selected_pid = Some(pid);
         }
+        ProcessTableMessage::SearchChanged(query) => {
+            state.search_query = query;
+            apply_filter(state);
+        }
     }
     Task::none()
+}
+
+pub fn apply_filter(state: &mut ProcessTableState) {
+    if state.search_query.is_empty() {
+        state.filtered_rows = state.rows.clone();
+    } else {
+        let query = state.search_query.to_lowercase();
+        state.filtered_rows = state
+            .rows
+            .iter()
+            .filter(|r| {
+                r.name.to_lowercase().contains(&query)
+                    || r.pid.to_string().contains(&query)
+            })
+            .cloned()
+            .collect();
+    }
 }
 
 pub fn view(state: &ProcessTableState) -> Element<'_, ProcessTableMessage, Theme> {
     let selected_row = state
         .selected_pid
-        .and_then(|pid| state.rows.iter().position(|r| r.pid == pid));
+        .and_then(|pid| state.filtered_rows.iter().position(|r| r.pid == pid));
 
     responsive(move |size| {
         let table = table(
             state.header.clone(),
             state.body.clone(),
             &state.columns,
-            &state.rows,
+            &state.filtered_rows,
             ProcessTableMessage::SyncHeader,
         )
         .on_column_resize(ProcessTableMessage::Resizing, ProcessTableMessage::Resized)

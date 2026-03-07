@@ -1,3 +1,10 @@
+use iced::Color;
+
+pub const LIGHT_THEME_HOVER: Color = Color::from_rgb(0.68627451, 0.70196078, 0.74509804);
+pub const DARK_THEME_HOVER: Color = Color::from_rgb(0.59215686, 0.60784314, 0.64313725);
+pub const LIGHT_THEME_IDLE: Color = Color::from_rgb(0.82745098, 0.84705882, 0.89019608);
+pub const DARK_THEME_IDLE: Color = Color::from_rgb(0.53333333, 0.54117647, 0.56470588);
+
 pub fn bytes_to_gb(bytes: u64) -> f32 {
     bytes as f32 / 1_000_000_000.0
 }
